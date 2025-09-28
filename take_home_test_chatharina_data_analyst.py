@@ -8,10 +8,11 @@ Original file is located at
 """
 
 # Commented out IPython magic to ensure Python compatibility.
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.ticker import PercentFormatter
 
 file_id = '1V1wjn7L8D2yjk2cMIwX6vJIRUC-gRDC-'
 download_url = f'https://drive.google.com/uc?export=download&id={file_id}'
@@ -316,11 +317,16 @@ st.pyplot(fig)
 
 from matplotlib.ticker import PercentFormatter
 
+# Kuartalkan total + YoY
 q = (m_total.assign(Periode_ts=m_total['Periode'].dt.to_timestamp())
-     .set_index('Periode_ts').resample('Q')['Valor_Total'].sum()
-     .reset_index().rename(columns={'Valor_Total':'Valor_Q'}))
+     .set_index('Periode_ts')
+     .resample('Q')['Valor_Total'].sum()          # <- 'QE' diganti 'Q'
+     .reset_index()
+     .rename(columns={'Valor_Total': 'Valor_Q'}))
+
 q['YoY'] = q['Valor_Q'].pct_change(4)
 
+# Ambil 8 kuartal terakhir yang valid
 qs = q[q['YoY'].notna()].tail(8).copy()
 qs['Qlabel'] = pd.PeriodIndex(qs['Periode_ts'], freq='Q').astype(str)
 x = np.arange(len(qs))
