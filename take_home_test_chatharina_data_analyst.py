@@ -13,12 +13,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-# %matplotlib inline
 from google.colab import drive
 import os
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.preprocessing import MinMaxScaler
+import streamlit as st
 
 file_id = '1V1wjn7L8D2yjk2cMIwX6vJIRUC-gRDC-'
 download_url = f'https://drive.google.com/uc?export=download&id={file_id}'
@@ -27,13 +27,15 @@ df = pd.read_csv(download_url)
 
 """Data Understanding"""
 
-df.head()
+st.dataframe(df.head())
 
-df.describe().T
+st.dataframe(df.describe().T)
 
-df.shape
+st.write("Shape:", df.shape)
 
-df.info()
+buf = []
+df.info(buf:=[])
+st.text("\n".join(map(str, buf)) if buf else df.info())
 
 """Cek Duplikat"""
 
@@ -64,7 +66,10 @@ for col in numeric_cols:
 
 """Feature Engineering"""
 
-df['Data'] = pd.to_datetime(df['Data'], format='%Y-%m-%d %H:%M:%S', errors='raise')
+df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
+if df['Data'].isna().any():
+    st.warning("Ada baris gagal parse tanggal di 'Data'. Baris tsb akan di-drop.")
+    df = df.dropna(subset=['Data'])
 df = df.sort_values('Data')
 
 # Fitur kalender"""
@@ -276,7 +281,7 @@ def pct(a, b):
     return None
   return float((a - b) / b)
 
-print(m_total.columns.tolist())
+st.write(m_total.columns.tolist())
 
 kpi = {
   "Total kumulatif": float(m_total['Valor_Total'].sum()),
@@ -308,61 +313,71 @@ ax.plot(m_total['Periode_ts'], m_total['Valor_Total'], label='Total')
 ax.plot(m_total['Periode_ts'], m_total['MA3'], label='MA3')
 ax.plot(m_total['Periode_ts'], m_total['MA6'], label='MA6')
 ax.set_title('Total Biaya Bulanan + MA3/MA6')
-ax.set_xlabel('Periode'); ax.set_ylabel('Biaya'); ax.legend()
-fig.tight_layout(); plt.show()
+ax.set_xlabel('Periode')
+ax.set_ylabel('Biaya')
+ax.legend()
+st.pyplot(fig)
 
 """YoY total (bar)"""
 
-import matplotlib.dates as mdates
 from matplotlib.ticker import PercentFormatter
 
-# Kuartalkan total + YoY
 q = (m_total.assign(Periode_ts=m_total['Periode'].dt.to_timestamp())
-  .set_index('Periode_ts').resample('QE')['Valor_Total'].sum()
-  .reset_index().rename(columns={'Valor_Total':'Valor_Q'}))
+     .set_index('Periode_ts').resample('QE')['Valor_Total'].sum()
+     .reset_index().rename(columns={'Valor_Total':'Valor_Q'}))
 q['YoY'] = q['Valor_Q'].pct_change(4)
 
-# Ambil 8 kuartal terakhir yang valid
 qs = q[q['YoY'].notna()].tail(8).copy()
-
-# Bikin label kuartal kategorikal (Qx YYYY)
 qs['Qlabel'] = pd.PeriodIndex(qs['Periode_ts'], freq='Q').astype(str)
 x = np.arange(len(qs))
 
 fig, ax = plt.subplots(figsize=(9,4))
-ax.bar(x, qs['YoY'].clip(-1,1))
-ax.gca().yaxis.set_major_formatter(PercentFormatter(1.0))
-ax.xticks(x, qs['Qlabel'], rotation=0)
-ax.ylim(-1.1, 1.1); ax.axhline(0, linewidth=1)
-ax.title('YoY Total per Kuartal (Last 8 Quarters)')
-ax.xlabel('Kuartal'); ax.ylabel('YoY')
-fig.tight_layout(); plt.show()
+ax.bar(x, qs['YoY'].clip(-1, 1))
+ax.yaxis.set_major_formatter(PercentFormatter(1.0))
+ax.set_xticks(x)
+ax.set_xticklabels(qs['Qlabel'], rotation=0)
+ax.set_ylim(-1.1, 1.1)
+ax.axhline(0, linewidth=1)
+ax.set_title('YoY Total per Kuartal (Last 8 Quarters)')
+ax.set_xlabel('Kuartal')
+ax.set_ylabel('YoY')
+st.pyplot(fig)
 
 """Komposisi kategori per bulan (100% stacked area)"""
 
-mix = (monthly.pivot_table(index='Periode', columns='Tipo de Custo', values='Valor_Mensal', aggfunc='sum')
-  .fillna(0).sort_index())
+mix = (monthly.pivot_table(index='Periode', columns='Tipo de Custo', 
+                           values='Valor_Mensal', aggfunc='sum')
+       .fillna(0).sort_index())
 share = mix.div(mix.sum(1), axis=0)
-share.plot(kind='area', figsize=(10,4))
-ax.title('Komposisi % Biaya per Kategori'); ax.ylabel('Share'); fig.tight_layout(); plt.show()
+
+ax2 = share.plot(kind='area', figsize=(10,4))
+ax2.set_title('Komposisi % Biaya per Kategori')
+ax2.set_ylabel('Share')
+fig2 = ax2.get_figure()
+st.pyplot(fig2)
 
 """YoY atau QoQ per kategori (pilih otomatis)"""
 
 recent = cat.copy()
 metric = 'YoY' if recent['YoY'].notna().any() else 'QoQ'
 last6 = (recent.dropna(subset=[metric])
-  .sort_values('Periode').groupby('Tipo de Custo').tail(1)
-  .sort_values(metric))
+         .sort_values('Periode').groupby('Tipo de Custo').tail(1)
+         .sort_values(metric))
+
 fig, ax = plt.subplots(figsize=(8,4))
-ax.barh(last6['Tipo de Custo'], last6[metric]); ax.axvline(0, linewidth=1)
-ax.title(f'{metric} Terakhir per Kategori'); fig.tight_layout(); plt.show()
+ax.barh(last6['Tipo de Custo'], last6[metric])
+ax.axvline(0, linewidth=1)
+ax.set_title(f'{metric} Terakhir per Kategori')
+st.pyplot(fig)
 
 """Ranking toko (kumulatif)"""
 
-rank_toko = store.groupby('Loja_ID', as_index=False)['Valor_Toko'].sum().sort_values('Valor_Toko', ascending=True)
+rank_toko = (store.groupby('Loja_ID', as_index=False)['Valor_Toko']
+             .sum().sort_values('Valor_Toko', ascending=True))
 fig, ax = plt.subplots(figsize=(8,5))
 ax.barh(rank_toko['Loja_ID'].astype(str), rank_toko['Valor_Toko'])
-ax.title('Total Biaya per Toko'); fig.tight_layout(); plt.show()
+ax.set_title('Total Biaya per Toko')
+st.pyplot(fig)
 
 """Tabel ringkas untuk narasi"""
 
