@@ -25,7 +25,7 @@ download_url = f'https://drive.google.com/uc?export=download&id={file_id}'
 
 df = pd.read_csv(download_url)
 
-"""# Data Understanding"""
+"""Data Understanding"""
 
 df.head()
 
@@ -35,18 +35,18 @@ df.shape
 
 df.info()
 
-"""# Cek Duplikat"""
+"""Cek Duplikat"""
 
 df.duplicated().sum()
 
-"""# Cek Missing Value"""
+"""Cek Missing Value"""
 
 df.isnull().sum()
 
 missing_percentage = df.isnull().sum()/df.shape[0]*100
 missing_percentage.sort_values(ascending=False)
 
-"""# Cek Outlier kolom numerik"""
+"""Cek Outlier kolom numerik"""
 
 numeric_cols = df.select_dtypes(include=np.number).columns
 
@@ -60,14 +60,14 @@ for col in numeric_cols:
   outliers = df[(df[col] < lower_bound) | (df[col] > upper_bound)]
   outlier_count = len(outliers)
   outlier_percentage = (outlier_count / len(df)) * 100
-  print(f"{col}: {outlier_count} outliers ({outlier_percentage:.2f}%)")
+  st.write(f"{col}: {outlier_count} outliers ({outlier_percentage:.2f}%)")
 
-"""# Feature Engineering"""
+"""Feature Engineering"""
 
 df['Data'] = pd.to_datetime(df['Data'], format='%Y-%m-%d %H:%M:%S', errors='raise')
 df = df.sort_values('Data')
 
-"""## Fitur kalender"""
+# Fitur kalender"""
 
 df['Tanggal'] = df['Data'].dt.date
 df['Tahun'] = df['Data'].dt.year
@@ -78,7 +78,7 @@ df['IsWeekend'] = df['Weekday'] >= 5
 df['Periode'] = df['Data'].dt.to_period('M')
 df['Periode_ts']= df['Periode'].dt.to_timestamp()
 
-"""## Standarkan ke level bulanan"""
+# Standarkan ke level bulanan"""
 
 monthly = (
   df.groupby(['Periode','Loja_ID','Tipo de Custo'], as_index=False)['Valor Mensal'].sum()
@@ -86,7 +86,7 @@ monthly = (
 )
 monthly['Periode_ts'] = monthly['Periode'].dt.to_timestamp()
 
-"""## Fitur tren/growth/seasonality per toko & kategori"""
+# Fitur tren/growth/seasonality per toko & kategori"""
 
 monthly = monthly.sort_values(['Loja_ID','Tipo de Custo','Periode'])
 grp = monthly.groupby(['Loja_ID','Tipo de Custo'], group_keys=False)
@@ -165,7 +165,7 @@ cat_q['Year']    = cat_q['Q'].dt.year
 cat_q['Quarter'] = cat_q['Q'].dt.quarter
 cat_q = cat_q.rename(columns={'Valor_Kategori':'Valor_Kategori_Q'})
 
-print({
+st.write({
   'YoY_total_notna': int(m_total['YoY'].notna().sum()),
   'YoY_cat_any': int(cat.groupby('Tipo de Custo')['YoY'].apply(lambda s: s.notna().any()).sum()),
   'QoQ_store_notna': int(store['QoQ'].notna().sum())
@@ -190,14 +190,14 @@ s3['value'] = pd.to_numeric(s3['value'], errors='coerce').fillna(0.0)
 assert s3.isna().sum().sum() == 0
 s3.to_csv('operational_costs_export_onefile.csv', index=False)
 
-"""## Flag kebijakan/kualitas data waktu"""
+"""Flag kebijakan/kualitas data waktu"""
 
 today = pd.Timestamp.today().normalize()
 monthly['Is_Future'] = monthly['Periode_ts'] > today
 monthly['Is_Q_End'] = monthly['Periode_ts'].dt.is_quarter_end
 monthly['Is_Y_End'] = monthly['Periode_ts'].dt.is_year_end
 
-"""## Sanity Check"""
+"""Sanity Check"""
 
 # Pastikan nama kolom growth di level grup beda agar tidak ketuker
 monthly = monthly.rename(columns={'MoM': 'MoM_grp', 'YoY': 'YoY_grp'})
@@ -232,7 +232,7 @@ store['Year'] = store['Periode_ts'].dt.year
 store['Quarter'] = store['Periode_ts'].dt.quarter
 store['Loja_ID'] = store['Loja_ID'].astype(str)
 
-print({
+st.write({
   # level grup (akan tetap tinggi)
   'dup_bucket>1': int(dup_bucket),
   'rows_future_date': int(future_rows),
@@ -253,7 +253,7 @@ print({
 - YoY per kategori tersedia pada 4 kategori jadi sisanya kita pakai QoQ sebagai alternatif.
 - QoQ per toko valid: 77 titik dimana cukup untuk insight operasional per toko.
 
-# KPI Kartu
+KPI Kartu
 """
 
 if 'Valor_Total' not in m_total.columns:
@@ -288,9 +288,9 @@ kpi = {
 }
 kpi
 
-"""# Visualisasi
+"""Visualisasi
 
-## Tren total + MA3/MA6
+Tren total + MA3/MA6
 """
 
 m_total = m_total.sort_values('Periode').reset_index(drop=True)
@@ -311,7 +311,7 @@ ax.set_title('Total Biaya Bulanan + MA3/MA6')
 ax.set_xlabel('Periode'); ax.set_ylabel('Biaya'); ax.legend()
 fig.tight_layout(); plt.show()
 
-"""## YoY total (bar)"""
+"""YoY total (bar)"""
 
 import matplotlib.dates as mdates
 from matplotlib.ticker import PercentFormatter
@@ -329,42 +329,42 @@ qs = q[q['YoY'].notna()].tail(8).copy()
 qs['Qlabel'] = pd.PeriodIndex(qs['Periode_ts'], freq='Q').astype(str)
 x = np.arange(len(qs))
 
-plt.figure(figsize=(9,4))
-plt.bar(x, qs['YoY'].clip(-1,1))
-plt.gca().yaxis.set_major_formatter(PercentFormatter(1.0))
-plt.xticks(x, qs['Qlabel'], rotation=0)
-plt.ylim(-1.1, 1.1); plt.axhline(0, linewidth=1)
-plt.title('YoY Total per Kuartal (Last 8 Quarters)')
-plt.xlabel('Kuartal'); plt.ylabel('YoY')
-plt.tight_layout(); plt.show()
+fig, ax = plt.subplots(figsize=(9,4))
+ax.bar(x, qs['YoY'].clip(-1,1))
+ax.gca().yaxis.set_major_formatter(PercentFormatter(1.0))
+ax.xticks(x, qs['Qlabel'], rotation=0)
+ax.ylim(-1.1, 1.1); ax.axhline(0, linewidth=1)
+ax.title('YoY Total per Kuartal (Last 8 Quarters)')
+ax.xlabel('Kuartal'); ax.ylabel('YoY')
+fig.tight_layout(); plt.show()
 
-"""## Komposisi kategori per bulan (100% stacked area)"""
+"""Komposisi kategori per bulan (100% stacked area)"""
 
 mix = (monthly.pivot_table(index='Periode', columns='Tipo de Custo', values='Valor_Mensal', aggfunc='sum')
   .fillna(0).sort_index())
 share = mix.div(mix.sum(1), axis=0)
 share.plot(kind='area', figsize=(10,4))
-plt.title('Komposisi % Biaya per Kategori'); plt.ylabel('Share'); plt.tight_layout(); plt.show()
+ax.title('Komposisi % Biaya per Kategori'); ax.ylabel('Share'); fig.tight_layout(); plt.show()
 
-"""## YoY atau QoQ per kategori (pilih otomatis)"""
+"""YoY atau QoQ per kategori (pilih otomatis)"""
 
 recent = cat.copy()
 metric = 'YoY' if recent['YoY'].notna().any() else 'QoQ'
 last6 = (recent.dropna(subset=[metric])
   .sort_values('Periode').groupby('Tipo de Custo').tail(1)
   .sort_values(metric))
-plt.figure(figsize=(8,4))
-plt.barh(last6['Tipo de Custo'], last6[metric]); plt.axvline(0, linewidth=1)
-plt.title(f'{metric} Terakhir per Kategori'); plt.tight_layout(); plt.show()
+fig, ax = plt.subplots(figsize=(8,4))
+ax.barh(last6['Tipo de Custo'], last6[metric]); ax.axvline(0, linewidth=1)
+ax.title(f'{metric} Terakhir per Kategori'); fig.tight_layout(); plt.show()
 
-"""## Ranking toko (kumulatif)"""
+"""Ranking toko (kumulatif)"""
 
 rank_toko = store.groupby('Loja_ID', as_index=False)['Valor_Toko'].sum().sort_values('Valor_Toko', ascending=True)
-plt.figure(figsize=(8,5))
-plt.barh(rank_toko['Loja_ID'].astype(str), rank_toko['Valor_Toko'])
-plt.title('Total Biaya per Toko'); plt.tight_layout(); plt.show()
+fig, ax = plt.subplots(figsize=(8,5))
+ax.barh(rank_toko['Loja_ID'].astype(str), rank_toko['Valor_Toko'])
+ax.title('Total Biaya per Toko'); fig.tight_layout(); plt.show()
 
-"""# Tabel ringkas untuk narasi"""
+"""Tabel ringkas untuk narasi"""
 
 # Top cost drivers (global)
 top_global = (monthly.groupby('Tipo de Custo', as_index=False)['Valor_Mensal']
@@ -388,12 +388,6 @@ toko_rank = toko_stats.sort_values('total', ascending=False)
 toko_vol  = toko_stats.sort_values('cv', ascending=False)
 
 top_global.head(5), share_change.head(5), toko_rank.head(5), toko_vol.head(5)
-
-"""# Anomali yang layak diinvestigasi"""
-
-z = (m_total['Valor_Total'] - m_total['Valor_Total'].mean())/m_total['Valor_Total'].std(ddof=0)
-anom_total = m_total.loc[z.abs()>3, ['Periode','Valor_Total']]
-anom_total
 
 """# Extract Artefact"""
 
@@ -580,12 +574,12 @@ tot['YoY_Roll4Q'] = pct_safe(tot['Roll12'], 12)
 tot = tot.drop(columns='Roll12')
 
 # Add print statements
-print("Columns of m before merge:", m.columns)
-print("Dtypes of m before merge:", m.dtypes)
-print("Columns of tot before merge:", tot.columns)
-print("Dtypes of tot before merge:", tot.dtypes)
-print("Per_M in m?", 'Per_M' in m.columns)
-print("Per_M in tot?", 'Per_M' in tot.columns)
+st.write("Columns of m before merge:", m.columns)
+st.write("Dtypes of m before merge:", m.dtypes)
+st.write("Columns of tot before merge:", tot.columns)
+st.write("Dtypes of tot before merge:", tot.dtypes)
+st.write("Per_M in m?", 'Per_M' in m.columns)
+st.write("Per_M in tot?", 'Per_M' in tot.columns)
 
 m = m.merge(
   tot[['Per_M','Valor_Total','MA3_total','MA6_total','MoM_total','YoY_total','YoY_Roll4Q']],
@@ -610,6 +604,5 @@ num_cols = ['Valor_Mensal','MA3','MA6','MoM','YoY','Valor_Total','MA3_total','MA
 m[num_cols] = m[num_cols].astype(float).fillna(0.0)
 
 # simpan
-m.to_csv('operational_costs_with_metrics.csv', index=False)
-print('OK, rows:', len(m))
-print(m.head(12))
+st.write('OK, rows:', len(m))
+st.write(m.head(12))
