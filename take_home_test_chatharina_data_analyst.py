@@ -8,16 +8,9 @@ Original file is located at
 """
 
 # Commented out IPython magic to ensure Python compatibility.
-from scipy.stats import norm
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from google.colab import drive
-import os
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MultiLabelBinarizer
-from sklearn.preprocessing import MinMaxScaler
 import streamlit as st
 
 file_id = '1V1wjn7L8D2yjk2cMIwX6vJIRUC-gRDC-'
@@ -33,9 +26,10 @@ st.dataframe(df.describe().T)
 
 st.write("Shape:", df.shape)
 
-buf = []
-df.info(buf:=[])
-st.text("\n".join(map(str, buf)) if buf else df.info())
+import io
+buf = io.StringIO()
+df.info(buf=buf)
+st.text(buf.getvalue())
 
 """Cek Duplikat"""
 
@@ -323,7 +317,7 @@ st.pyplot(fig)
 from matplotlib.ticker import PercentFormatter
 
 q = (m_total.assign(Periode_ts=m_total['Periode'].dt.to_timestamp())
-     .set_index('Periode_ts').resample('QE')['Valor_Total'].sum()
+     .set_index('Periode_ts').resample('Q')['Valor_Total'].sum()
      .reset_index().rename(columns={'Valor_Total':'Valor_Q'}))
 q['YoY'] = q['Valor_Q'].pct_change(4)
 
