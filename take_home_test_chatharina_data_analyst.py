@@ -11,8 +11,7 @@ Original file is located at
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.ticker import PercentFormatter
+import altair as alt
 
 file_id = '1V1wjn7L8D2yjk2cMIwX6vJIRUC-gRDC-'
 download_url = f'https://drive.google.com/uc?export=download&id={file_id}'
@@ -294,67 +293,64 @@ Tren total + MA3/MA6
 """
 
 m_total = m_total.sort_values('Periode').reset_index(drop=True)
-
 if 'MA3' not in m_total.columns:
-  m_total['MA3'] = m_total['Valor_Total'].rolling(3, min_periods=1).mean()
+    m_total['MA3'] = m_total['Valor_Total'].rolling(3, min_periods=1).mean()
 if 'MA6' not in m_total.columns:
-  m_total['MA6'] = m_total['Valor_Total'].rolling(6, min_periods=1).mean()
-
+    m_total['MA6'] = m_total['Valor_Total'].rolling(6, min_periods=1).mean()
 if 'Periode_ts' not in m_total.columns:
-  m_total['Periode_ts'] = m_total['Periode'].dt.to_timestamp()
+    m_total['Periode_ts'] = m_total['Periode'].dt.to_timestamp()
 
-fig, ax = plt.subplots(figsize=(9,4))
-ax.plot(m_total['Periode_ts'], m_total['Valor_Total'], label='Total')
-ax.plot(m_total['Periode_ts'], m_total['MA3'], label='MA3')
-ax.plot(m_total['Periode_ts'], m_total['MA6'], label='MA6')
-ax.set_title('Total Biaya Bulanan + MA3/MA6')
-ax.set_xlabel('Periode')
-ax.set_ylabel('Biaya')
-ax.legend()
-st.pyplot(fig)
+line_df = m_total[['Periode_ts','Valor_Total','MA3','MA6']].rename(
+    columns={'Periode_ts':'Periode'}
+)
+plot_df = line_df.melt('Periode', var_name='Series', value_name='Value')
+
+st.altair_chart(
+    alt.Chart(plot_df).mark_line().encode(
+        x=alt.X('Periode:T', title='Periode'),
+        y=alt.Y('Value:Q', title='Biaya'),
+        color='Series:N',
+        tooltip=['Periode:T','Series:N','Value:Q']
+    ).properties(title='Total Biaya Bulanan + MA3/MA6', width='container', height=280),
+    use_container_width=True
+)
 
 """YoY total (bar)"""
 
-from matplotlib.ticker import PercentFormatter
-
-# Kuartalkan total + YoY
 q = (m_total.assign(Periode_ts=m_total['Periode'].dt.to_timestamp())
-     .set_index('Periode_ts')
-     .resample('Q')['Valor_Total'].sum()          # <- 'QE' diganti 'Q'
-     .reset_index()
-     .rename(columns={'Valor_Total': 'Valor_Q'}))
-
+     .set_index('Periode_ts').resample('Q')['Valor_Total'].sum()
+     .reset_index().rename(columns={'Valor_Total':'Valor_Q'}))
 q['YoY'] = q['Valor_Q'].pct_change(4)
-
-# Ambil 8 kuartal terakhir yang valid
 qs = q[q['YoY'].notna()].tail(8).copy()
 qs['Qlabel'] = pd.PeriodIndex(qs['Periode_ts'], freq='Q').astype(str)
-x = np.arange(len(qs))
 
-fig, ax = plt.subplots(figsize=(9,4))
-ax.bar(x, qs['YoY'].clip(-1, 1))
-ax.yaxis.set_major_formatter(PercentFormatter(1.0))
-ax.set_xticks(x)
-ax.set_xticklabels(qs['Qlabel'], rotation=0)
-ax.set_ylim(-1.1, 1.1)
-ax.axhline(0, linewidth=1)
-ax.set_title('YoY Total per Kuartal (Last 8 Quarters)')
-ax.set_xlabel('Kuartal')
-ax.set_ylabel('YoY')
-st.pyplot(fig)
+st.altair_chart(
+    alt.Chart(qs).mark_bar().encode(
+        x=alt.X('Qlabel:N', title='Kuartal'),
+        y=alt.Y('YoY:Q', title='YoY', axis=alt.Axis(format='%')),
+        tooltip=['Qlabel','YoY']
+    ).properties(title='YoY Total per Kuartal (Last 8 Quarters)', width='container', height=280),
+    use_container_width=True
+)
 
 """Komposisi kategori per bulan (100% stacked area)"""
 
-mix = (monthly.pivot_table(index='Periode', columns='Tipo de Custo', 
+mix = (monthly.pivot_table(index='Periode', columns='Tipo de Custo',
                            values='Valor_Mensal', aggfunc='sum')
        .fillna(0).sort_index())
-share = mix.div(mix.sum(1), axis=0)
+share = mix.div(mix.sum(1), axis=0).reset_index().rename(columns={'Periode':'Periode'})
+share['Periode'] = share['Periode'].dt.to_timestamp()
+share_long = share.melt('Periode', var_name='Kategori', value_name='Share')
 
-ax2 = share.plot(kind='area', figsize=(10,4))
-ax2.set_title('Komposisi % Biaya per Kategori')
-ax2.set_ylabel('Share')
-fig2 = ax2.get_figure()
-st.pyplot(fig2)
+st.altair_chart(
+    alt.Chart(share_long).mark_area().encode(
+        x=alt.X('Periode:T', title='Periode'),
+        y=alt.Y('Share:Q', stack='normalize', axis=alt.Axis(format='%')),
+        color='Kategori:N',
+        tooltip=['Periode:T','Kategori:N','Share:Q']
+    ).properties(title='Komposisi % Biaya per Kategori', width='container', height=300),
+    use_container_width=True
+)
 
 """YoY atau QoQ per kategori (pilih otomatis)"""
 
@@ -364,20 +360,29 @@ last6 = (recent.dropna(subset=[metric])
          .sort_values('Periode').groupby('Tipo de Custo').tail(1)
          .sort_values(metric))
 
-fig, ax = plt.subplots(figsize=(8,4))
-ax.barh(last6['Tipo de Custo'], last6[metric])
-ax.axvline(0, linewidth=1)
-ax.set_title(f'{metric} Terakhir per Kategori')
-st.pyplot(fig)
+st.altair_chart(
+    alt.Chart(last6).mark_bar().encode(
+        x=alt.X(f'{metric}:Q', title=metric, axis=alt.Axis(format='%') if metric=='YoY' else alt.Axis()),
+        y=alt.Y('Tipo de Custo:N', sort='-x', title='Kategori'),
+        tooltip=['Tipo de Custo', metric]
+    ).properties(title=f'{metric} Terakhir per Kategori', width='container', height=280),
+    use_container_width=True
+)
 
 """Ranking toko (kumulatif)"""
 
 rank_toko = (store.groupby('Loja_ID', as_index=False)['Valor_Toko']
              .sum().sort_values('Valor_Toko', ascending=True))
-fig, ax = plt.subplots(figsize=(8,5))
-ax.barh(rank_toko['Loja_ID'].astype(str), rank_toko['Valor_Toko'])
-ax.set_title('Total Biaya per Toko')
-st.pyplot(fig)
+rank_toko['Loja_ID'] = rank_toko['Loja_ID'].astype(str)
+
+st.altair_chart(
+    alt.Chart(rank_toko).mark_bar().encode(
+        x=alt.X('Valor_Toko:Q', title='Total Biaya'),
+        y=alt.Y('Loja_ID:N', sort='-x', title='Toko'),
+        tooltip=['Loja_ID','Valor_Toko']
+    ).properties(title='Total Biaya per Toko', width='container', height=320),
+    use_container_width=True
+)
 
 """Tabel ringkas untuk narasi"""
 
